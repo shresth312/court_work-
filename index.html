@@ -63,7 +63,7 @@ td.x button{border:0;background:none;color:var(--danger);padding:0 8px;font-size
 </main>
 <script>
 var rows=[],KEY="court-serial-rows";
-try{var s=localStorage.getItem(KEY);if(s)rows=JSON.parse(s)}catch(e){}
+try{var s=localStorage.getItem(KEY);if(s){var p=JSON.parse(s);if(Array.isArray(p))rows=p.filter(Array.isArray).map(function(r){return[String(r[0]==null?"":r[0]),String(r[1]==null?"":r[1])]})}}catch(e){}
 if(!rows.length)for(var i=0;i<15;i++)rows.push(["",""]);
 var tb=document.querySelector("#in tbody");
 
@@ -117,6 +117,7 @@ tb.addEventListener("input",function(e){
 });
 tb.addEventListener("keydown",function(e){
   var t=e.target;if(t.tagName!=="INPUT")return;
+  if(e.isComposing)return;
   var r=+t.dataset.r,c=+t.dataset.c;
   if(e.key==="Enter"||e.key==="ArrowDown"){
     e.preventDefault();
@@ -140,7 +141,7 @@ tb.addEventListener("paste",function(e){
   save();renderIn();
 });
 tb.addEventListener("click",function(e){
-  var d=e.target.dataset.del;if(d===undefined)return;
+  var btn=e.target.closest("[data-del]");if(!btn)return;var d=btn.dataset.del;
   rows.splice(+d,1);if(!rows.length)rows.push(["",""]);save();renderIn();
 });
 document.getElementById("add").onclick=function(){for(var i=0;i<10;i++)rows.push(["",""]);save();renderIn()};
@@ -154,18 +155,19 @@ function tsv(sep){
   });
   return out.join("\n");
 }
-function q(v,sep){return sep===","&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function q(v,sep){if(sep!==",")return v.replace(/[\t\n]/g," ");return/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 
 document.getElementById("copy").onclick=function(){
   var b=this,t=tsv("\t");
   function ok(){b.textContent="Copied";setTimeout(function(){b.textContent="Copy grouped table"},1400)}
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fallback)}else fallback();
-  function fallback(){var a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy");ok()}catch(e){}a.remove()}
+  function fallback(){var a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{if(document.execCommand("copy"))ok();else alert("Copy failed. Please copy manually.")}catch(e){alert("Copy failed. Please copy manually.")}a.remove()}
 };
 document.getElementById("csv").onclick=function(){
   var blob=new Blob(["\ufeff"+tsv(",")],{type:"text/csv"});
   var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="court-serial.csv";
   document.body.appendChild(a);a.click();a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},1000);
 };
 renderIn();
 </script>
