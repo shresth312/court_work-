@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Court No. / Serial No. Sheet</title>
+<style>
+:root{--bg:#f3f6f4;--surface:#fff;--ink:#1d2a24;--muted:#6b7a72;--line:#c9d3cd;--head:#e2ebe5;--accent:#1f7a52;--accent-ink:#fff;--sel:#e8f5ee;--danger:#b3372b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14201a;--surface:#1b2a22;--ink:#e6efe9;--muted:#93a69b;--line:#34493d;--head:#243a2e;--accent:#4cc08a;--accent-ink:#0e1a13;--sel:#22392c;--danger:#ef8a7d}}
+:root[data-theme="dark"]{--bg:#14201a;--surface:#1b2a22;--ink:#e6efe9;--muted:#93a69b;--line:#34493d;--head:#243a2e;--accent:#4cc08a;--accent-ink:#0e1a13;--sel:#22392c;--danger:#ef8a7d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Segoe UI",Calibri,Arial,sans-serif}
+header{padding:18px 20px 6px;max-width:1100px;margin:auto}
+h1{font-size:22px;margin:0 0 4px}
+header p{margin:0;color:var(--muted)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:12px 20px;max-width:1100px;margin:auto}
+button{font:inherit;padding:7px 14px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;cursor:pointer}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+main{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:0 20px 28px;max-width:1100px;margin:auto}
+@media(max-width:760px){main{grid-template-columns:1fr}}
+h2{font-size:15px;margin:0 0 8px}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);max-height:70vh;overflow-y:auto}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid var(--line);padding:0;height:34px}
+th{background:var(--head);font-weight:600;padding:0 10px;text-align:left;position:sticky;top:0;z-index:1}
+td.n{background:var(--head);color:var(--muted);text-align:center;width:44px;font-size:13px}
+td input{width:100%;height:34px;border:0;background:transparent;color:var(--ink);padding:0 10px;font:inherit}
+td input:focus{background:var(--sel)}
+td.x{width:38px;text-align:center}
+td.x button{border:0;background:none;color:var(--danger);padding:0 8px;font-size:18px}
+.out td{padding:0 12px}
+.out td.court{background:var(--sel);font-weight:600;vertical-align:middle;text-align:center;width:40%}
+.dupe{color:var(--accent);font-size:13px;font-weight:400}
+.hint{color:var(--muted);font-size:13px;margin-top:6px}
+.empty{padding:18px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+<h1>Court No. / Serial No. Sheet</h1>
+<p>Type or paste rows on the left. Repeated court numbers appear once on the right, with all their serial numbers.</p>
+</header>
+<div class="bar">
+<button class="primary" id="add">Add 10 rows</button>
+<button id="copy">Copy grouped table</button>
+<button id="csv">Download CSV</button>
+<button id="clear">Clear all</button>
+</div>
+<main>
+<section>
+<h2>Entry sheet</h2>
+<div class="wrap"><table id="in"><thead><tr><th></th><th>Court No.</th><th>Serial No.</th><th></th></tr></thead><tbody></tbody></table></div>
+<div class="hint">Enter or ↓ moves down. You can paste two columns straight from Excel.</div>
+</section>
+<section>
+<h2>Grouped result</h2>
+<div class="wrap"><table class="out" id="out"><thead><tr><th>Court No.</th><th>Serial No.</th></tr></thead><tbody></tbody></table></div>
+<div class="hint" id="stat"></div>
+</section>
+</main>
+<script>
+var rows=[],KEY="court-serial-rows";
+try{var s=localStorage.getItem(KEY);if(s)rows=JSON.parse(s)}catch(e){}
+if(!rows.length)for(var i=0;i<15;i++)rows.push(["",""]);
+var tb=document.querySelector("#in tbody");
+
+function save(){try{localStorage.setItem(KEY,JSON.stringify(rows))}catch(e){}}
+function cmp(a,b){return a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"})}
+
+function renderIn(focus){
+  tb.innerHTML="";
+  rows.forEach(function(r,i){
+    var tr=document.createElement("tr");
+    tr.innerHTML='<td class="n">'+(i+1)+'</td><td><input data-r="'+i+'" data-c="0" aria-label="Court no. row '+(i+1)+'"></td><td><input data-r="'+i+'" data-c="1" aria-label="Serial no. row '+(i+1)+'"></td><td class="x"><button title="Delete row" data-del="'+i+'">×</button></td>';
+    var ins=tr.querySelectorAll("input");ins[0].value=r[0];ins[1].value=r[1];
+    tb.appendChild(tr);
+  });
+  if(focus){var el=tb.querySelector('input[data-r="'+focus[0]+'"][data-c="'+focus[1]+'"]');if(el)el.focus()}
+  renderOut();
+}
+
+function group(){
+  var map={},order=[];
+  rows.forEach(function(r){
+    var c=r[0].trim(),sn=r[1].trim();
+    if(!c&&!sn)return;
+    var k=c.toLowerCase();
+    if(!(k in map)){map[k]={court:c,list:[]};order.push(k)}
+    if(sn)map[k].list.push(sn);
+  });
+  order.sort(function(a,b){return cmp(map[a].court,map[b].court)});
+  return order.map(function(k){var g=map[k];g.list.sort(cmp);return g});
+}
+
+function renderOut(){
+  var g=group(),o=document.querySelector("#out tbody"),html="",total=0;
+  if(!g.length){o.innerHTML='<tr><td class="empty" colspan="2">Nothing yet. Add a court number and serial number.</td></tr>';document.getElementById("stat").textContent="";return}
+  g.forEach(function(x){
+    var n=Math.max(x.list.length,1);total+=x.list.length;
+    for(var i=0;i<n;i++){
+      html+="<tr>";
+      if(i===0)html+='<td class="court" rowspan="'+n+'">'+esc(x.court||"(blank)")+(n>1?'<br><span class="dupe">'+n+' serials</span>':"")+"</td>";
+      html+="<td>"+esc(x.list[i]||"")+"</td></tr>";
+    }
+  });
+  o.innerHTML=html;
+  document.getElementById("stat").textContent=g.length+" court numbers, "+total+" serial numbers";
+}
+function esc(t){return String(t).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+
+tb.addEventListener("input",function(e){
+  var t=e.target;if(t.tagName!=="INPUT")return;
+  rows[+t.dataset.r][+t.dataset.c]=t.value;save();renderOut();
+});
+tb.addEventListener("keydown",function(e){
+  var t=e.target;if(t.tagName!=="INPUT")return;
+  var r=+t.dataset.r,c=+t.dataset.c;
+  if(e.key==="Enter"||e.key==="ArrowDown"){
+    e.preventDefault();
+    if(r===rows.length-1){rows.push(["",""]);save();renderIn([r+1,c])}
+    else tb.querySelector('input[data-r="'+(r+1)+'"][data-c="'+c+'"]').focus();
+  }else if(e.key==="ArrowUp"&&r>0){
+    e.preventDefault();tb.querySelector('input[data-r="'+(r-1)+'"][data-c="'+c+'"]').focus();
+  }
+});
+tb.addEventListener("paste",function(e){
+  var t=e.target;if(t.tagName!=="INPUT")return;
+  var txt=(e.clipboardData||window.clipboardData).getData("text");
+  if(txt.indexOf("\n")<0&&txt.indexOf("\t")<0)return;
+  e.preventDefault();
+  var r=+t.dataset.r,c=+t.dataset.c;
+  txt.replace(/\r/g,"").replace(/\n$/,"").split("\n").forEach(function(line,i){
+    var cells=line.split("\t");
+    while(rows.length<=r+i)rows.push(["",""]);
+    cells.forEach(function(v,j){if(c+j<2)rows[r+i][c+j]=v.trim()});
+  });
+  save();renderIn();
+});
+tb.addEventListener("click",function(e){
+  var d=e.target.dataset.del;if(d===undefined)return;
+  rows.splice(+d,1);if(!rows.length)rows.push(["",""]);save();renderIn();
+});
+document.getElementById("add").onclick=function(){for(var i=0;i<10;i++)rows.push(["",""]);save();renderIn()};
+document.getElementById("clear").onclick=function(){if(confirm("Clear all rows?")){rows=[];for(var i=0;i<15;i++)rows.push(["",""]);save();renderIn()}};
+
+function tsv(sep){
+  var out=["Court No."+sep+"Serial No."];
+  group().forEach(function(x){
+    if(!x.list.length)out.push(q(x.court,sep)+sep);
+    x.list.forEach(function(s,i){out.push((i===0?q(x.court,sep):"")+sep+q(s,sep))});
+  });
+  return out.join("\n");
+}
+function q(v,sep){return sep===","&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+
+document.getElementById("copy").onclick=function(){
+  var b=this,t=tsv("\t");
+  function ok(){b.textContent="Copied";setTimeout(function(){b.textContent="Copy grouped table"},1400)}
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fallback)}else fallback();
+  function fallback(){var a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy");ok()}catch(e){}a.remove()}
+};
+document.getElementById("csv").onclick=function(){
+  var blob=new Blob(["\ufeff"+tsv(",")],{type:"text/csv"});
+  var a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="court-serial.csv";
+  document.body.appendChild(a);a.click();a.remove();
+};
+renderIn();
+</script>
+</body>
+</html>
